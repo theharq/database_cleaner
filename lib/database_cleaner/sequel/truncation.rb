@@ -16,13 +16,9 @@ module DatabaseCleaner
 
         case db.database_type
         when :postgres
-          # PostgreSQL requires all tables with FKs to be truncates in the same command, or have the CASCADE keyword
-          # appended. Bulk truncation without CASCADE is:
-          # * Safer. Tables outside of tables_to_truncate won't be affected.
-          # * Faster. Less roundtrips to the db.
           unless (tables = tables_to_truncate(db)).empty?
             all_tables = tables.map { |t| %("#{t}") }.join(',')
-            db.run "TRUNCATE TABLE #{all_tables};"
+            db.run "TRUNCATE TABLE #{all_tables} #{restart_identity} #{cascade};"
           end
         else
           tables = tables_to_truncate(db)
@@ -38,6 +34,18 @@ module DatabaseCleaner
       end
 
       private
+
+      def db_version
+        @db_version ||= db.server_version
+      end
+
+      def cascade
+        @cascade ||= db_version >=  80200 ? 'CASCADE' : ''
+      end
+
+      def restart_identity
+        @restart_identity ||= db_version >=  80400 ? 'RESTART IDENTITY' : ''
+      end
 
       def pre_count_truncate_tables(db, tables)
         tables = tables.reject { |table| db[table.to_sym].count == 0 }
